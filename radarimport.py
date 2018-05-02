@@ -8,14 +8,14 @@ countfiles = 0
 countprocessedfiles = 0
 errorfiles = 0
 
-with open(r"G:\RadarData\RadarList.txt", "r") as file:
+with open(r"%temp%\RadarList.txt", "r") as file:
     filelist = file.readlines()
     for line in filelist:
 
         print(line)
         # Find directory for NEXRAD files
         radarname = line[:-1]
-        radarpath = r"G:\RadarData"
+        radarpath = r"%temp%"
         fullpath = path.join(radarpath, radarname)
         try:
             radar = pyart.io.read_nexrad_archive(fullpath)
@@ -32,7 +32,7 @@ with open(r"G:\RadarData\RadarList.txt", "r") as file:
                 # field = radar.get_field (0, 'reflectivity')
                 grid = pyart.map.grid_from_radars(radar, grid_shape, grid_limits, 'map_to_grid')
 
-                tiffpath = r"G:\RadarData\Testout"
+                tiffpath = r"%temp%"
                 tiffname = radarname + "_v.tif"
                 fulltiffpathv = path.join(tiffpath, tiffname)
                 pyart.io.output_to_geotiff.write_grid_geotiff(grid, fulltiffpathv, 'velocity')
