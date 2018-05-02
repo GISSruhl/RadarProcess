@@ -8,14 +8,21 @@ countfiles = 0
 countprocessedfiles = 0
 errorfiles = 0
 
-with open(r"%temp%\RadarList.txt", "r") as file:
+rootdir = r'C:\ProgramData\Alteryx\Engine'
+for root, dirs, files in os.walk(rootdir):
+    for file in files:
+        if file == 'RadarList': # use your filename here without file type extension
+            filepath = os.path.join(root, file) 
+            fileroot = root
+                
+with open(filepath, "r") as file:
     filelist = file.readlines()
     for line in filelist:
 
         print(line)
         # Find directory for NEXRAD files
         radarname = line[:-1]
-        radarpath = r"%temp%"
+        radarpath = root
         fullpath = path.join(radarpath, radarname)
         try:
             radar = pyart.io.read_nexrad_archive(fullpath)
@@ -32,7 +39,7 @@ with open(r"%temp%\RadarList.txt", "r") as file:
                 # field = radar.get_field (0, 'reflectivity')
                 grid = pyart.map.grid_from_radars(radar, grid_shape, grid_limits, 'map_to_grid')
 
-                tiffpath = r"%temp%"
+                tiffpath = root
                 tiffname = radarname + "_v.tif"
                 fulltiffpathv = path.join(tiffpath, tiffname)
                 pyart.io.output_to_geotiff.write_grid_geotiff(grid, fulltiffpathv, 'velocity')
