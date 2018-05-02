@@ -1,84 +1,107 @@
-"""
-TODO: Investigate the cartesian_to_geographic function in pyart.core to convert cartesian coordinates
-
-"""
-
 # Import libraries
 import pyart
-import gdal_polygonize as gdalpoly
+from osgeo import gdal, ogr, osr
 import matplotlib.pyplot as plt
+from os import path
 
-# Find directory for NEXRAD files
+countfiles = 0
+countprocessedfiles = 0
+errorfiles = 0
 
-radar = pyart.io.read_nexrad_archive("G:\RadarData\KFFC20160811_150625_V06")
+with open(r"G:\RadarData\RadarList.txt", "r") as file:
+    filelist = file.readlines()
+    for line in filelist:
 
-# print("Lat/Long"
-#      "n", radar.latitude["data"], ",", radar.longitude["data"])
-# print("Sweep Mode\n", radar.sweep_mode)
-# print("Sweep Number\n", radar.sweep_number)
+        print(line)
+        # Find directory for NEXRAD files
+        radarname = line[:-1]
+        radarpath = r"G:\RadarData"
+        fullpath = path.join(radarpath, radarname)
+        try:
+            radar = pyart.io.read_nexrad_archive(fullpath)
+            # print("Radar Fields \n",radar.fields)
+            vcppatt = radar.metadata["vcp_pattern"]
+            # print("VCP Pattern \n", vcppatt)
+            countfiles += 1
+            if vcppatt == 32 or vcppatt == 31:
+                print("Select radar, it's good for finding birds.")
+                countprocessedfiles += 1
+                # compute noise
+                grid_shape = (1, 241, 241)
+                grid_limits = ((2000, 2000), (-123000.0, 123000.0), (-123000.0, 123000.0))
+                # field = radar.get_field (0, 'reflectivity')
+                grid = pyart.map.grid_from_radars(radar, grid_shape, grid_limits, 'map_to_grid')
 
-# Only get sweeps below .5 degrees elevation
-sweepdict = {}
-sweeplist = radar.sweep_number['data']
-for sweep in sweeplist:
-    sweepelevation = radar.get_elevation(sweep)
-    if sweepelevation[0] < .5:
-        sweepdict[sweep] = sweepelevation[0]
-    else:
-        pass
-print("Sweeps below .5 degrees \n", sweepdict)
+                tiffpath = r"G:\RadarData\Testout"
+                tiffname = radarname + "_v.tif"
+                fulltiffpathv = path.join(tiffpath, tiffname)
+                pyart.io.output_to_geotiff.write_grid_geotiff(grid, fulltiffpathv, 'velocity')
 
-# Get radar gates for converting to coordinates
-gates = radar.get_gate_x_y_z (0, False, True)
-print("Gates\n", gates)
-
-# Get Azimuth
-
-azimuth = radar.get_azimuth (0)
-print("Azimuth \n", azimuth)
-
-# print("Radar Fields \n",radar.fields)
-print("VCP Pattern \n", radar.metadata["vcp_pattern"])
-vcppatt = radar.metadata["vcp_pattern"]
-if vcppatt == 32 or vcppatt == 31:
-    print("Select radar, it's good for finding birds.")
-
-# radarplot = pyart.graph.RadarDisplay(radar)
-# print("Radar Plot\n", radarplot.loc)
-# print("\n\n\n\n")
-# display = pyart.graph.RadarDisplay(radar)
-# fig = plt.figure(figsize=(6,5))
-#
-# ax = fig.add_subplot(111)
-# display.plot('velocity', 0, title = 'NEXRAD Velocity',
-#              vmin=-1, vmax=1, colorbar_label='', ax=ax)
-# display.plot_range_ring(radar.range['data'][-1]/ 1200., ax=ax)
-# display.set_limits(xlim=(-400,400), ylim=(-400, 400), ax=ax)
-# plt.show()
-# drawradar = pyart.core.antenna_to_cartesian(radar.range, radar.get_azimuth(1), radar.get_elevation)
-# print(drawradar)
+                tiffname = radarname + "_r.tif"
+                fulltiffpathr = path.join(tiffpath, tiffname)
+                pyart.io.output_to_geotiff.write_grid_geotiff(grid, fulltiffpathr, 'reflectivity')
 
 
-# Begin Radar cleaning
+                # GeoTiff to Vector then export as GeoJSON
+                gdal.UseExceptions()
+                sourceraster = gdal.Open(fulltiffpathv)
 
-# Find gating objects (things that block radar signatures like trees or mountains) using
-# pyart.correct.find_objects
+                # rastercount = sourceraster.GetRasterCount()
+                # print("Raster Count\n",rastercount)
+                rasterband = sourceraster.GetRasterBand(1)
 
-# pyart.retreive.kdp_maesaka to get differential phase.  Noisy differential phase is a sign of
-# biological activity
+                outlayerpath = r"G:\RadarData\Testout"
+                outlayername = radarname + "_v.shp"
+                outlayer = path.join(outlayerpath, outlayername)
+
+                shapedriver = ogr.GetDriverByName("ESRI Shapefile")
+
+                datasource = shapedriver.CreateDataSource(outlayer)
+
+                # get proj from raster
+                srs = osr.SpatialReference()
+                srs.ImportFromWkt(sourceraster.GetProjectionRef())
+                # create layer with proj
+                outlayershp = datasource.CreateLayer(outlayer, srs)
+
+                newfield = ogr.FieldDefn('Velocity', ogr.OFTInteger)
+                outlayershp.CreateField(newfield)
+
+                gdal.Polygonize(rasterband, None, outlayershp, 0, [], callback=None)
+
+                # GeoTiff to Vector then export as GeoJSON
+                gdal.UseExceptions()
+                sourceraster = gdal.Open(fulltiffpathr)
+
+                # rastercount = sourceraster.GetRasterCount()
+                # print("Raster Count\n",rastercount)
+                rasterband = sourceraster.GetRasterBand(1)
+
+                outlayername = radarname + "_r.shp"
+                outlayer = path.join(outlayerpath, outlayername)
+
+                shapedriver = ogr.GetDriverByName("ESRI Shapefile")
+
+                datasource = shapedriver.CreateDataSource(outlayer)
+
+                # get proj from raster
+                srs = osr.SpatialReference()
+                srs.ImportFromWkt (sourceraster.GetProjectionRef())
+                # create layer with proj
+                outlayershp = datasource.CreateLayer(outlayer, srs)
+
+                newfield = ogr.FieldDefn('Reflectivity', ogr.OFTInteger)
+                outlayershp.CreateField(newfield)
+
+                gdal.Polygonize(rasterband, None, outlayershp, 0, [], callback=None)
+
+        except:
+            errorfiles += 1
+            print("Unknown compression type for ", line)
+            pass
 
 
-# compute noise
-grid_shape = (1, 241, 241)
-grid_limits = ((2000, 2000), (-123000.0, 123000.0), (-123000.0, 123000.0))
-field = radar.get_field(0, 'reflectivity')
-grid = pyart.map.grid_from_radars(radar, grid_shape, grid_limits, 'map_to_grid')
-print(grid)
 
-pyart.io.output_to_geotiff.write_grid_geotiff(grid, r'G:\RadarData\Testout\test.tif', 'velocity')
-
-# GeoTiff to Vector then export as GeoJSON
-gdal.UseExceptions()
-sourceraster = gdal.Open(r'G:\RadarData\Testout\test.tif')
-
-rasterband = sourceraster.GetRasterBand()
+print("End Test")
+print(countprocessedfiles, " out of ", countfiles, " processed with ", errorfiles, " file read errors")
+file.close()
