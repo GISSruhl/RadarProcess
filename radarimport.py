@@ -15,7 +15,7 @@ for root, dirs, files in os.walk(rootdir):
             filepath = os.path.join(root, file) 
             fileroot = root
                 
-with open(filepath, "r") as file:
+with open(r"G:\OneDrive-Mobilitie\OneDrive for Business\Thesis\RadarList.txt", "r") as file:
     filelist = file.readlines()
     for line in filelist:
 
